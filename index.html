@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NodeOS - Made By GreenGrass1024</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        body, html, #root { height: 100%; margin: 0; overflow: hidden; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+        .transition-theme { transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        
+        .glass-light { background: rgba(255, 255, 255, 0.75); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.3); }
+        .glass-dark { background: rgba(28, 28, 30, 0.85); backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px); border: 1px solid rgba(255, 255, 255, 0.1); }
+
+        .mac-btn { width: 12px; height: 12px; border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer; border: none; padding: 0; transition: transform 0.1s; }
+        .mac-btn span { opacity: 0; font-size: 8px; font-weight: bold; color: rgba(0,0,0,0.5); }
+        .mac-btn:hover span { opacity: 1; }
+        .mac-close { background: #ff5f56; }
+        .mac-min { background: #ffbd2e; }
+        .mac-max { background: #27c93f; }
+
+        .wallpaper-overlay { position: absolute; inset: 0; background: black; transition: opacity 0.5s ease; pointer-events: none; }
+        
+        /* Calc specific styling */
+        .calc-btn { aspect-ratio: 1; border-radius: 999px; display: flex; align-items: center; justify-content: center; font-size: 1.25rem; font-weight: 500; transition: filter 0.2s; }
+        .calc-btn:active { filter: brightness(1.5); }
+
+        /* Game Canvas Styling */
+        .game-canvas { width: 100%; height: 100%; display: block; background: #70c5ce; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useCallback } = React;
+        
+        const Icon = ({ name, size = 20, className = "" }) => {
+            const iconRef = useRef(null);
+            const renderIcon = useCallback(() => {
+                if (iconRef.current && window.lucide) {
+                    while (iconRef.current.firstChild) iconRef.current.removeChild(iconRef.current.firstChild);
+                    const iconElement = document.createElement('i');
+                    iconElement.setAttribute('data-lucide', name);
+                    iconRef.current.appendChild(iconElement);
+                    window.lucide.createIcons({
+                        attrs: { strokeWidth: 2, width: size, height: size, class: className },
+                        nameAttr: 'data-lucide'
+                    });
+                }
+            }, [name, size, className]);
+            useEffect(() => { renderIcon(); }, [renderIcon]);
+            return <span ref={iconRef} className="inline-flex items-center justify-center pointer-events-none" style={{ width: size, height: size }}></span>;
+        };
+
+        const FlappyBird = () => {
+            const canvasRef = useRef(null);
+            const [gameOver, setGameOver] = useState(false);
+            const [score, setScore] = useState(0);
+
+            useEffect(() => {
+                const canvas = canvasRef.current;
+                const ctx = canvas.getContext('2d');
+                let animationId;
+                
+                let bird = { x: 50, y: 150, velocity: 0, gravity: 0.25, jump: -4.6, radius: 12 };
+                let pipes = [];
+                let frame = 0;
+                let active = true;
+
+                const spawnPipe = () => {
+                    const gap = 100;
+                    const minHeight = 50;
+                    const height = Math.floor(Math.random() * (canvas.height - gap - 2 * minHeight)) + minHeight;
+                    pipes.push({ x: canvas.width, top: height, bottom: height + gap, passed: false });
+                };
+
+                const update = () => {
+                    if (gameOver || !active) return;
+
+                    bird.velocity += bird.gravity;
+                    bird.y += bird.velocity;
+
+                    if (frame % 90 === 0) spawnPipe();
+
+                    pipes.forEach(pipe => {
+                        pipe.x -= 2;
+                        
+                        // Collision check
+                        if (
+                            bird.x + bird.radius > pipe.x && 
+                            bird.x - bird.radius < pipe.x + 50 && 
+                            (bird.y - bird.radius < pipe.top || bird.y + bird.radius > pipe.bottom)
+                        ) {
+                            setGameOver(true);
+                            active = false;
+                        }
+
+                        if (!pipe.passed && pipe.x < bird.x) {
+                            pipe.passed = true;
+                            setScore(s => s + 1);
+                        }
+                    });
+
+                    pipes = pipes.filter(pipe => pipe.x > -50);
+
+                    if (bird.y + bird.radius > canvas.height || bird.y - bird.radius < 0) {
+                        setGameOver(true);
+                        active = false;
+                    }
+
+                    frame++;
+                };
+
+                const draw = () => {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Background
+                    ctx.fillStyle = '#70c5ce';
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // Pipes
+                    ctx.fillStyle = '#73bf2e';
+                    pipes.forEach(pipe => {
+                        ctx.fillRect(pipe.x, 0, 50, pipe.top);
+                        ctx.fillRect(pipe.x, pipe.bottom, 50, canvas.height - pipe.bottom);
+                        ctx.strokeStyle = '#558022';
+                        ctx.strokeRect(pipe.x, 0, 50, pipe.top);
+                        ctx.strokeRect(pipe.x, pipe.bottom, 50, canvas.height - pipe.bottom);
+                    });
+
+                    // Bird
+                    ctx.fillStyle = '#f7e11e';
+                    ctx.beginPath();
+                    ctx.arc(bird.x, bird.y, bird.radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    update();
+                    animationId = requestAnimationFrame(draw);
+                };
+
+                const handleInput = () => {
+                    if (gameOver) {
+                        // Reset
+                        bird = { x: 50, y: 150, velocity: 0, gravity: 0.25, jump: -4.6, radius: 12 };
+                        pipes = [];
+                        setScore(0);
+                        setGameOver(false);
+                        active = true;
+                    } else {
+                        bird.velocity = bird.jump;
+                    }
+                };
+
+                canvas.addEventListener('mousedown', handleInput);
+                draw();
+
+                return () => {
+                    cancelAnimationFrame(animationId);
+                    canvas.removeEventListener('mousedown', handleInput);
+                };
+            }, [gameOver]);
+
+            return (
+                <div className="relative w-full h-full overflow-hidden">
+                    <canvas ref={canvasRef} width={400} height={400} className="game-canvas" />
+                    <div className="absolute top-4 left-0 right-0 text-center pointer-events-none">
+                        <span className="text-white text-4xl font-bold drop-shadow-lg">{score}</span>
+                    </div>
+                    {gameOver && (
+                        <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                            <div className="bg-white p-6 rounded-2xl text-center shadow-2xl">
+                                <h2 className="text-2xl font-bold mb-2">Game Over</h2>
+                                <p className="text-gray-600 mb-4">Final Score: {score}</p>
+                                <button className="bg-blue-500 text-white px-6 py-2 rounded-full font-bold">Try Again</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const Calculator = () => {
+            const [display, setDisplay] = useState('0');
+            const [memory, setMemory] = useState(null);
+            const [operator, setOperator] = useState(null);
+            const [waitingForNext, setWaitingForNext] = useState(false);
+
+            const inputDigit = (digit) => {
+                if (waitingForNext) {
+                    setDisplay(String(digit));
+                    setWaitingForNext(false);
+                } else {
+                    setDisplay(display === '0' ? String(digit) : display + digit);
+                }
+            };
+
+            const performOperation = (nextOp) => {
+                const inputValue = parseFloat(display);
+                if (memory === null) {
+                    setMemory(inputValue);
+                } else if (operator) {
+                    const result = calculate(memory, inputValue, operator);
+                    setMemory(result);
+                    setDisplay(String(result));
+                }
+                setWaitingForNext(true);
+                setOperator(nextOp);
+            };
+
+            const calculate = (a, b, op) => {
+                if (op === '+') return a + b;
+                if (op === '-') return a - b;
+                if (op === '×') return a * b;
+                if (op === '÷') return a / b;
+                return b;
+            };
+
+            const clear = () => {
+                setDisplay('0');
+                setMemory(null);
+                setOperator(null);
+                setWaitingForNext(false);
+            };
+
+            return (
+                <div className="h-full bg-black flex flex-col p-4 select-none">
+                    <div className="flex-1 flex items-end justify-end pb-4 px-2">
+                        <span className="text-white text-6xl font-light tracking-tight truncate">{display}</span>
+                    </div>
+                    <div className="grid grid-cols-4 gap-3">
+                        <button onClick={clear} className="calc-btn bg-[#a5a5a5] text-black">AC</button>
+                        <button className="calc-btn bg-[#a5a5a5] text-black">±</button>
+                        <button className="calc-btn bg-[#a5a5a5] text-black">%</button>
+                        <button onClick={() => performOperation('÷')} className="calc-btn bg-[#ff9f0a] text-white">÷</button>
+                        
+                        <button onClick={7} onClick={() => inputDigit(7)} className="calc-btn bg-[#333333] text-white">7</button>
+                        <button onClick={8} onClick={() => inputDigit(8)} className="calc-btn bg-[#333333] text-white">8</button>
+                        <button onClick={9} onClick={() => inputDigit(9)} className="calc-btn bg-[#333333] text-white">9</button>
+                        <button onClick={() => performOperation('×')} className="calc-btn bg-[#ff9f0a] text-white">×</button>
+                        
+                        <button onClick={4} onClick={() => inputDigit(4)} className="calc-btn bg-[#333333] text-white">4</button>
+                        <button onClick={5} onClick={() => inputDigit(5)} className="calc-btn bg-[#333333] text-white">5</button>
+                        <button onClick={6} onClick={() => inputDigit(6)} className="calc-btn bg-[#333333] text-white">6</button>
+                        <button onClick={() => performOperation('-')} className="calc-btn bg-[#ff9f0a] text-white">-</button>
+                        
+                        <button onClick={1} onClick={() => inputDigit(1)} className="calc-btn bg-[#333333] text-white">1</button>
+                        <button onClick={2} onClick={() => inputDigit(2)} className="calc-btn bg-[#333333] text-white">2</button>
+                        <button onClick={3} onClick={() => inputDigit(3)} className="calc-btn bg-[#333333] text-white">3</button>
+                        <button onClick={() => performOperation('+')} className="calc-btn bg-[#ff9f0a] text-white">+</button>
+                        
+                        <button onClick={() => inputDigit(0)} className="calc-btn bg-[#333333] text-white col-span-2 !aspect-auto rounded-full px-6 flex justify-start items-center">0</button>
+                        <button onClick={() => inputDigit('.')} className="calc-btn bg-[#333333] text-white">.</button>
+                        <button onClick={() => performOperation(null)} className="calc-btn bg-[#ff9f0a] text-white">=</button>
+                    </div>
+                </div>
+            );
+        };
+
+        const SettingsApp = ({ darkMode, setSystemState }) => {
+            const [activeTab, setActiveTab] = useState('profile');
+            const sectionStyle = `flex items-center gap-3 p-3 rounded-xl cursor-pointer transition-colors ${darkMode ? 'hover:bg-white/10' : 'hover:bg-black/5'}`;
+            const activeStyle = darkMode ? 'bg-blue-600 text-white hover:bg-blue-600' : 'bg-blue-500 text-white hover:bg-blue-500';
+
+            return (
+                <div className={`flex h-full transition-theme ${darkMode ? 'text-white' : 'text-gray-900'}`}>
+                    <div className={`w-56 p-4 border-r flex flex-col gap-1 ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
+                        <div onClick={() => setActiveTab('profile')} className={`${sectionStyle} ${activeTab === 'profile' ? activeStyle : ''}`}>
+                            <Icon name="User" size={18} /> <span className="text-sm font-medium">Profile</span>
+                        </div>
+                        <div onClick={() => setActiveTab('appearance')} className={`${sectionStyle} ${activeTab === 'appearance' ? activeStyle : ''}`}>
+                            <Icon name="Palette" size={18} /> <span className="text-sm font-medium">Appearance</span>
+                        </div>
+                        <div onClick={() => setActiveTab('wifi')} className={`${sectionStyle} ${activeTab === 'wifi' ? activeStyle : ''}`}>
+                            <Icon name="Wifi" size={18} /> <span className="text-sm font-medium">Wi-Fi</span>
+                        </div>
+                        <div onClick={() => setActiveTab('about')} className={`${sectionStyle} ${activeTab === 'about' ? activeStyle : ''}`}>
+                            <Icon name="Info" size={18} /> <span className="text-sm font-medium">About</span>
+                        </div>
+                    </div>
+                    <div className="flex-1 p-8 overflow-auto">
+                        {activeTab === 'profile' && (
+                            <div>
+                                <div className="flex items-center gap-4 mb-8">
+                                    <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-blue-500 to-purple-500 flex items-center justify-center text-white text-2xl font-bold shadow-lg">G</div>
+                                    <div>
+                                        <h2 className="text-xl font-bold">GreenGrass1024</h2>
+                                        <p className="text-sm opacity-50">Local User Account</p>
+                                    </div>
+                                </div>
+                                <div className={`p-4 rounded-xl border ${darkMode ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'}`}>
+                                    <p className="text-xs font-bold uppercase tracking-wider opacity-40 mb-2">Details</p>
+                                    <div className="flex justify-between py-2 border-b border-white/10 text-sm"><span>Status</span><span className="text-green-500 font-bold">● Online</span></div>
+                                    <div className="flex justify-between py-2 text-sm"><span>Admin Access</span><span>Enabled</span></div>
+                                </div>
+                            </div>
+                        )}
+                        {activeTab === 'appearance' && (
+                            <div>
+                                <h2 className="text-xl font-bold mb-6">Appearance</h2>
+                                <div className={`p-4 rounded-xl border flex items-center justify-between ${darkMode ? 'bg-white/5 border-white/10' : 'bg-black/5 border-black/10'}`}>
+                                    <div className="flex items-center gap-3">
+                                        <Icon name={darkMode ? "Moon" : "Sun"} size={20} />
+                                        <div>
+                                            <p className="font-semibold text-sm">Dark Mode</p>
+                                            <p className="text-xs opacity-50">Visual style of the system</p>
+                                        </div>
+                                    </div>
+                                    <button 
+                                        onClick={() => setSystemState(prev => ({...prev, darkMode: !prev.darkMode}))}
+                                        className={`w-10 h-5 rounded-full transition-all relative ${darkMode ? 'bg-blue-500' : 'bg-gray-300'}`}
+                                    >
+                                        <div className={`absolute top-1 w-3 h-3 bg-white rounded-full transition-all ${darkMode ? 'left-6' : 'left-1'}`}></div>
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                        {activeTab === 'about' && (
+                            <div className="text-center py-10">
+                                <Icon name="Cpu" size={48} className="mx-auto mb-4 text-blue-500" />
+                                <h2 className="text-2xl font-bold">NodeOS</h2>
+                                <p className="opacity-50 text-sm mb-6">Version 2.1.0 (Build 2024.1.20)</p>
+                                <div className={`max-w-xs mx-auto text-left p-4 rounded-xl text-xs space-y-4 opacity-70 ${darkMode ? 'bg-white/5' : 'bg-black/5'}`}>
+                                    <p>Processor: Virtual 8-Core ARM</p>
+                                    <p>Memory: 16 GB WebRAM</p>
+                                    <div className="pt-2 border-t border-white/10">
+                                        <p className="font-bold mb-1">Play Online:</p>
+                                        <p className="text-blue-500 break-all cursor-pointer hover:underline">https://nodestudio.github.io/flappybird</p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const Window = ({ app, onClose, onFocus, zIndex, isMaximized, onToggleMaximize, initialPos, darkMode, systemState, setSystemState }) => {
+            const [pos, setPos] = useState(initialPos || { x: 100, y: 50 });
+            const [isDragging, setIsDragging] = useState(false);
+            const [dragOffset, setDragOffset] = useState({ x: 0, y: 0 });
+            
+            const handleMouseDown = (e) => {
+                if (isMaximized || e.target.closest('button') || e.target.closest('input') || e.target.closest('textarea') || e.target.closest('canvas')) return;
+                setIsDragging(true);
+                setDragOffset({ x: e.clientX - pos.x, y: e.clientY - pos.y });
+                onFocus();
+            };
+
+            useEffect(() => {
+                const move = (e) => isDragging && setPos({ x: e.clientX - dragOffset.x, y: e.clientY - dragOffset.y });
+                const up = () => setIsDragging(false);
+                if (isDragging) {
+                    window.addEventListener('mousemove', move);
+                    window.addEventListener('mouseup', up);
+                }
+                return () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+            }, [isDragging, dragOffset]);
+
+            const windowWidth = app.id === 'calculator' || app.id === 'flappy' ? 320 : (app.id === 'settings' ? 700 : 640);
+            const windowHeight = app.id === 'calculator' ? 480 : (app.id === 'flappy' ? 440 : (app.id === 'settings' ? 480 : 440));
+
+            return (
+                <div 
+                    onClick={onFocus}
+                    style={{ 
+                        zIndex, 
+                        top: isMaximized ? 28 : pos.y, 
+                        left: isMaximized ? 0 : pos.x,
+                        width: isMaximized ? '100%' : windowWidth,
+                        height: isMaximized ? 'calc(100% - 98px)' : windowHeight
+                    }}
+                    className={`absolute flex flex-col shadow-2xl transition-all duration-300 ${isMaximized ? 'rounded-none' : 'rounded-xl overflow-hidden'} ${darkMode ? 'glass-dark' : 'glass-light'}`}
+                >
+                    <div onMouseDown={handleMouseDown} className={`h-10 flex items-center justify-between px-3 select-none border-b ${darkMode ? 'border-white/10' : 'border-black/5'}`}>
+                        <div className="flex gap-2 w-20">
+                            <button onClick={onClose} className="mac-btn mac-close"><span>✕</span></button>
+                            <button className="mac-btn mac-min"><span>−</span></button>
+                            <button onClick={onToggleMaximize} className="mac-btn mac-max"><span>＋</span></button>
+                        </div>
+                        <span className={`text-[11px] font-bold tracking-tight opacity-70 ${darkMode ? 'text-white' : 'text-black'}`}>{app.label}</span>
+                        <div className="w-20"></div>
+                    </div>
+                    <div className="flex-1 overflow-hidden relative">
+                         {app.id === 'browser' && <iframe src="https://www.wikipedia.org" className="w-full h-full border-none bg-white" />}
+                         {app.id === 'notes' && <textarea className={`w-full h-full p-6 outline-none bg-transparent resize-none leading-relaxed ${darkMode ? 'text-white' : 'text-black'}`} placeholder="Start writing..." defaultValue="Welcome to Notes." />}
+                         {app.id === 'calculator' && <Calculator />}
+                         {app.id === 'settings' && <SettingsApp darkMode={darkMode} setSystemState={setSystemState} />}
+                         {app.id === 'flappy' && <FlappyBird />}
+                         {app.id === 'music' && <div className="h-full flex items-center justify-center opacity-50 italic">Music Player Ready.</div>}
+                    </div>
+                </div>
+            );
+        };
+
+        function App() {
+            const [booting, setBooting] = useState(true);
+            const [systemState, setSystemState] = useState({ darkMode: false, time: new Date() });
+            const [openApps, setOpenApps] = useState([]);
+            const [focusedId, setFocusedId] = useState(null);
+            const [maximized, setMaximized] = useState({});
+
+            const coreApps = [
+                { id: 'browser', label: 'Safari', iconName: 'Globe', color: 'bg-blue-500' },
+                { id: 'notes', label: 'Notes', iconName: 'FileText', color: 'bg-yellow-400' },
+                { id: 'flappy', label: 'Flappy Bird', iconName: 'Zap', color: 'bg-emerald-500' },
+                { id: 'music', label: 'Music', iconName: 'Music', color: 'bg-pink-500' },
+                { id: 'calculator', label: 'Calculator', iconName: 'Calculator', color: 'bg-orange-500' },
+                { id: 'settings', label: 'Settings', iconName: 'Settings', color: 'bg-gray-500' },
+            ];
+
+            useEffect(() => {
+                const t = setInterval(() => setSystemState(s => ({...s, time: new Date()})), 1000);
+                setTimeout(() => setBooting(false), 1500);
+                return () => clearInterval(t);
+            }, []);
+
+            const toggleApp = (app) => {
+                if (!openApps.find(a => a.id === app.id)) setOpenApps([...openApps, app]);
+                setFocusedId(app.id);
+            };
+
+            if (booting) return (
+                <div className="w-full h-full bg-black flex flex-col items-center justify-center text-white">
+                    <Icon name="Cpu" size={64} className="mb-4 text-blue-500" />
+                    <div className="text-xl font-bold tracking-widest uppercase">NodeOS</div>
+                </div>
+            );
+
+            return (
+                <div className={`w-full h-full relative overflow-hidden transition-theme`}>
+                    <div className="absolute inset-0 bg-cover bg-center" style={{backgroundImage: 'url(https://images.unsplash.com/photo-1477346611705-65d1883cee1e?auto=format&fit=crop&q=80&w=2070)'}}></div>
+                    <div className="wallpaper-overlay" style={{ opacity: systemState.darkMode ? 0.4 : 0 }}></div>
+
+                    {/* Top Bar */}
+                    <div className={`absolute top-0 left-0 right-0 h-7 flex items-center justify-between px-4 text-[12px] font-medium z-[1000] transition-theme ${systemState.darkMode ? 'bg-black/40 text-white' : 'bg-white/40 text-black'}`}>
+                        <div className="flex items-center gap-4">
+                            <span className="font-bold"></span>
+                            <span className="font-bold tracking-tight">NodeOS</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <Icon name="Wifi" size={14} />
+                            <Icon name="Battery" size={14} />
+                            <span>{systemState.time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                        </div>
+                    </div>
+
+                    {/* Windows Layer */}
+                    <div className="absolute inset-0 z-20 pointer-events-none">
+                        <div className="relative w-full h-full pointer-events-auto">
+                            {openApps.map((app, i) => (
+                                <Window 
+                                    key={app.id} app={app} 
+                                    zIndex={focusedId === app.id ? 100 : 20 + i}
+                                    darkMode={systemState.darkMode}
+                                    systemState={systemState}
+                                    setSystemState={setSystemState}
+                                    onFocus={() => setFocusedId(app.id)}
+                                    onClose={() => setOpenApps(openApps.filter(a => a.id !== app.id))}
+                                    isMaximized={!!maximized[app.id]}
+                                    onToggleMaximize={() => setMaximized({...maximized, [app.id]: !maximized[app.id]})}
+                                    initialPos={{ x: 100 + i * 30, y: 100 + i * 30 }}
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Dock */}
+                    <div className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center p-2 z-[1000]">
+                        <div className={`flex items-center p-2 gap-2 rounded-2xl shadow-2xl transition-theme ${systemState.darkMode ? 'glass-dark' : 'glass-light'}`}>
+                            {coreApps.map(app => (
+                                <div key={app.id} onClick={() => toggleApp(app)} className="relative group cursor-pointer flex flex-col items-center">
+                                    <div className={`${app.color} w-12 h-12 rounded-xl flex items-center justify-center text-white shadow-md transition-all group-hover:-translate-y-2 group-active:scale-90`}>
+                                        <Icon name={app.iconName} size={24} />
+                                    </div>
+                                    <div className="h-1 flex items-center justify-center mt-1">
+                                        {openApps.some(a => a.id === app.id) && <div className={`w-1 h-1 rounded-full ${systemState.darkMode ? 'bg-white' : 'bg-black/60'}`}></div>}
+                                    </div>
+                                    <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2 py-1 bg-black/80 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 pointer-events-none transition-opacity whitespace-nowrap">{app.label}</div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
